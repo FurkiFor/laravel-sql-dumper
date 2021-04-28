@@ -1,10 +1,11 @@
 <?php
 
-namespace VendorName\Skeleton\Tests;
+namespace Furkifor\SqlDumper\Tests;
 
 use PHPUnit\Framework\TestCase;
+use Furkifor\SqlDumper;
 
-class ExampleTest extends TestCase
+class ExampleTest 
 {
     /** @test */
     public function true_is_true()
