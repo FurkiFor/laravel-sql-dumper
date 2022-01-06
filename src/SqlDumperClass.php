@@ -6,7 +6,7 @@ class SqlDumperClass
 {
     public $query;
     public $table;
-    public $FirstWhere;
+    public $firstWhere;
     public $where;
     public $orderBy;
     public $limit;
@@ -19,7 +19,7 @@ class SqlDumperClass
         $this->table = $table;
         $this->query = '';
         $this->select = '';
-        $this->FirstWhere = '';
+        $this->firstWhere = '';
         $this->where = '';
         $this->orderBy = '';
         $this->limit = '';
