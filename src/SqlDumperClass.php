@@ -2,11 +2,14 @@
 
 namespace Furkifor\SqlDumper;
 
+/**
+ * Class SqlDumperClass
+ * @package Furkifor\SqlDumper
+ * @author furkanunsal69@gmail.con
+ */
 class SqlDumperClass
 {
-    public $query;
     public $table;
-    public $firstWhere;
     public $where;
     public $orderBy;
     public $limit;
@@ -17,23 +20,27 @@ class SqlDumperClass
     public function __construct($table)
     {
         $this->table = $table;
-        $this->query = '';
-        $this->select = '';
-        $this->firstWhere = '';
-        $this->where = '';
-        $this->orderBy = '';
-        $this->limit = '';
-        $this->with = '';
         $this->whereCount = 0;
     }
 
-    public function select(string $select = '*')
+    /**
+     * @param string|string $select
+     * @return $this
+     */
+    public function select(string $select = null)
     {
+        if (!$select)
+            $select = '*';
         $this->select = "SELECT $select FROM ";
 
         return $this;
     }
 
+    /**
+     * @param $variable
+     * @param $type
+     * @return $this
+     */
     public function orderBy($variable, $type)
     {
         $this->orderBy .= " ORDER BY $variable $type ";
@@ -41,6 +48,10 @@ class SqlDumperClass
         return $this;
     }
 
+    /**
+     * @param $where
+     * @return $this
+     */
     public function where($where)
     {
         if ($this->whereCount == 0) {
@@ -53,13 +64,22 @@ class SqlDumperClass
         return $this;
     }
 
-    public function with($with, $sql)
+    /**
+     * @param $joinParameter  = LEFT | RIGHT | INNER
+     * @param $condition
+     * @return $this
+     */
+    public function with($joinParameter, $condition)
     {
-        $this->with .= preg_replace('/this/i', $this->table, ' ' . $with . ' JOIN ' . $sql);
+        $this->with .= str_ireplace("this", $this->table, ' ' . $joinParameter . ' JOIN ' . $condition);
 
         return $this;
     }
 
+    /**
+     * @param $count
+     * @return $this
+     */
     public function limit($count)
     {
         $this->limit .= " LIMIT $count ";
@@ -67,7 +87,10 @@ class SqlDumperClass
         return $this;
     }
 
-    public function get()
+    /**
+     * @return mixed
+     */
+    public function getSql()
     {
         return print_r(@$this->select . @$this->table . @$this->with . @$this->where . @$this->orderBy . @$this->limit)[0];
     }
