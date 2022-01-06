@@ -93,7 +93,6 @@ class SqlDumperClass implements SqlDumperClassInterface
      */
     public function get()
     {
-        $result =  (@$this->select . @$this->table . @$this->with . @$this->where . @$this->orderBy . @$this->limit);
-        return $result;
+       return   (@$this->select . @$this->table . @$this->with . @$this->where . @$this->orderBy . @$this->limit);
     }
 }
