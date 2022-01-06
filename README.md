@@ -14,6 +14,7 @@ composer require furkifor/sql_dumper
 ```php
 $sql_dumper = new Furkifor\SqlDumper("TABLE_NAME");
 echo $sql_dumper->select('*')->get();
+// select * from TABLE_NAME 
 ```
 
 - [furkan](https://github.com/FurkiFor)
