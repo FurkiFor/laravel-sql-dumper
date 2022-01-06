@@ -2,12 +2,13 @@
 
 namespace Furkifor\SqlDumper;
 
+use Furkifor\SqlDumper\SqlDumperClassInterface;
 /**
  * Class SqlDumperClass
  * @package Furkifor\SqlDumper
  * @author furkanunsal69@gmail.con
  */
-class SqlDumperClass
+class SqlDumperClass implements SqlDumperClassInterface
 {
     public $table;
     public $where;
@@ -90,7 +91,7 @@ class SqlDumperClass
     /**
      * @return mixed
      */
-    public function getSql()
+    public function get()
     {
         return print_r(@$this->select . @$this->table . @$this->with . @$this->where . @$this->orderBy . @$this->limit)[0];
     }
