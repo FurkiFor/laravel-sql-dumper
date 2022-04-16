@@ -15,18 +15,17 @@ class SqlDumperClass implements SqlDumperClassInterface
     public $orderBy;
     public $limit;
     public $select;
-    public $whereCount;
     public $with;
 
     public function __construct($table)
     {
+        $this->where = '1=1';
         $this->table = $table;
-        $this->whereCount = 0;
     }
 
     /**
      * @param string|string $select
-     * @return $this
+     * @return $this | object
      */
     public function select(string $select = null)
     {
@@ -38,11 +37,11 @@ class SqlDumperClass implements SqlDumperClassInterface
     }
 
     /**
-     * @param $variable
-     * @param $type
-     * @return $this
+     * @param $variable | string
+     * @param $type | string
+     * @return $this | object
      */
-    public function orderBy($variable, $type)
+    public function orderBy(string $variable, string $type)
     {
         $this->orderBy .= " ORDER BY $variable $type ";
 
@@ -50,27 +49,23 @@ class SqlDumperClass implements SqlDumperClassInterface
     }
 
     /**
-     * @param $where
-     * @return $this
+     * @param $where | string 
+     * @param $condition | string 
+     * @return $this | object
      */
-    public function where($where)
+    public function where(string $where,string $condition = 'and')
     {
-        if ($this->whereCount == 0) {
-            $this->where .= " WHERE $where ";
-            $this->whereCount = 1;
-        } else {
-            $this->where .= " and $where ";
-        }
+        $this->where .= " $condition $where ";
 
         return $this;
     }
 
     /**
-     * @param $joinParameter  = LEFT | RIGHT | INNER
-     * @param $condition
-     * @return $this
+     * @param $joinParameter  = LEFT | RIGHT | INNER | string 
+     * @param $condition | string 
+     * @return $this | object
      */
-    public function with($joinParameter, $condition)
+    public function with(string $joinParameter, string $condition)
     {
         $this->with .= str_ireplace("this", $this->table, ' ' . $joinParameter . ' JOIN ' . $condition);
 
@@ -78,10 +73,10 @@ class SqlDumperClass implements SqlDumperClassInterface
     }
 
     /**
-     * @param $count
-     * @return $this
+     * @param $count = 1,2,3,4,5,6,7,8,9 | int 
+     * @return $this | object
      */
-    public function limit($count)
+    public function limit(int $count)
     {
         $this->limit .= " LIMIT $count ";
 
