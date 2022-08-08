@@ -1,6 +1,6 @@
 {
     "name": "furkifor/sql_dumper",
-    "description": "This is my package SqlDumper",
+    "description": "Laravel eloquent mantığıyla orm işlemlerinde sql çıktısı alma projesi ",
     "keywords": [
         "FurkiFor",
         "sql_dumper"
