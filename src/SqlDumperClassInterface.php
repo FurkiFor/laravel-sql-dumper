@@ -9,5 +9,6 @@ interface SqlDumperClassInterface {
     public function with(string $joinParameter , string $condition);
     public function limit(int $count);
     public function get();
+    public function first();
 
 }

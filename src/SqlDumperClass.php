@@ -90,4 +90,12 @@ class SqlDumperClass implements SqlDumperClassInterface
     {
        return   (@$this->select . @$this->table . @$this->with . @$this->where . @$this->orderBy . @$this->limit);
     }
+
+    /**
+     * @return mixed
+     */
+    public function first()
+    {
+       return   (@$this->select . @$this->table . @$this->with . @$this->where . @$this->orderBy . limit 1);
+    }
 }
