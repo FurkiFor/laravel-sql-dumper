@@ -9,7 +9,7 @@
 composer require furkifor/sql_dumper
 ```
 
-## Usage
+## Kullanımı
 
 ```php
 $sql_dumper = new Furkifor\SqlDumper("TABLE_NAME");
