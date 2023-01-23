@@ -99,4 +99,8 @@ class Column
     {
         array_push($this->constraints, $constraint);
     }
+    public function __toString()
+    {
+        return "{$this->name} {$this->type} " . implode(' ', $this->constraints);
+    }
 }
