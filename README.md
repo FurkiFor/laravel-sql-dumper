@@ -27,7 +27,18 @@ $table->name("users")
     ->datetime('created_at')->default("CURRENT_TIMESTAMP")
     ->int('role_id')->notnull()->foreignKey('roles','id')->check("role_id>0")
     ->createTable();
-// select * from TABLE_NAME 
+/*
+CREATE TABLE users (
+  id INT(11) AUTO_INCREMENT PRIMARY KEY NOT NULL,
+  username VARCHAR(255) NOT NULL UNIQUE,
+  email VARCHAR(255) NOT NULL UNIQUE,
+  password VARCHAR(255) NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  role_id INT NOT NULL,
+  FOREIGN KEY (role_id) REFERENCES roles(id),
+  CHECK (role_id > 0)
+)
+*/
 ```
 
 
