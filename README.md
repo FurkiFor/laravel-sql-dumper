@@ -16,6 +16,20 @@ $sql_dumper = new Furkifor\SqlDumper("TABLE_NAME");
 echo $sql_dumper->select('*')->get();
 // select * from TABLE_NAME 
 ```
+## Migrate Kullanımı
+
+```php
+$table = new MigrateClass("mysql");
+$table->name("users")
+    ->string('username',255)->unique()->notnull()
+    ->string('email',255)->unique()->notnull()
+    ->string('password',255)->notnull()
+    ->datetime('created_at')->default("CURRENT_TIMESTAMP")
+    ->int('role_id')->notnull()->foreignKey('roles','id')->check("role_id>0")
+    ->createTable();
+// select * from TABLE_NAME 
+```
+
 
 - [furkan](https://github.com/FurkiFor)
 - [All Contributors](../../contributors)
