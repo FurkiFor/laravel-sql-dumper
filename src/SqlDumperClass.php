@@ -3,99 +3,197 @@
 namespace Furkifor\SqlDumper;
 
 use Furkifor\SqlDumper\SqlDumperClassInterface;
+
 /**
  * Class SqlDumperClass
  * @package Furkifor\SqlDumper
- * @author furkanunsal69@gmail.con
+ * @author furkanunsal69@gmail.com
  */
 class SqlDumperClass implements SqlDumperClassInterface
 {
-    public $table;
-    public $where;
-    public $orderBy;
-    public $limit;
-    public $select;
-    public $with;
+    private $table;
+    private $where = [];
+    private $orderBy = '';
+    private $limit = '';
+    private $select = '';
+    private $joins = '';
+    private $groupBy = '';
+    private $having = '';
+    private $params = [];
+    private $distinct = false;
 
-    public function __construct($table)
+    public function __construct(string $table)
     {
-        $this->where = '1=1';
         $this->table = $table;
     }
 
     /**
-     * @param string|string $select
-     * @return $this | object
+     * Set the columns to select.
+     * 
+     * @param string|null $select
+     * @return self
      */
-    public function select(string $select = null)
+    public function select(string $select = '*'): self
     {
-        if (!$select)
-            $select = '*';
-        $this->select = "SELECT $select FROM ";
-
+        $this->select = "SELECT " . ($this->distinct ? 'DISTINCT ' : '') . "$select FROM $this->table";
         return $this;
     }
 
     /**
-     * @param $variable | string
-     * @param $type | string
-     * @return $this | object
+     * Add an ORDER BY clause.
+     * 
+     * @param string $column
+     * @param string $direction
+     * @return self
      */
-    public function orderBy(string $variable, string $type)
+    public function orderBy(string $column, string $direction = 'ASC'): self
     {
-        $this->orderBy .= " ORDER BY $variable $type ";
-
+        $direction = strtoupper($direction);
+        if (!in_array($direction, ['ASC', 'DESC'])) {
+            throw new \InvalidArgumentException('Invalid order direction: ' . $direction);
+        }
+        $this->orderBy = " ORDER BY $column $direction";
         return $this;
     }
 
     /**
-     * @param $where | string 
-     * @param $condition | string 
-     * @return $this | object
+     * Add a WHERE clause.
+     * 
+     * @param string $condition
+     * @param array $params
+     * @param string $operator
+     * @return self
      */
-    public function where(string $where,string $condition = 'and')
+    public function where(string $condition, array $params = [], string $operator = 'AND'): self
     {
-        $this->where .= " $condition $where ";
-
+        $operator = strtoupper($operator);
+        if (!in_array($operator, ['AND', 'OR'])) {
+            throw new \InvalidArgumentException('Invalid condition operator: ' . $operator);
+        }
+        $this->where[] = "$operator $condition";
+        $this->params = array_merge($this->params, $params);
         return $this;
     }
 
     /**
-     * @param $joinParameter  = LEFT | RIGHT | INNER | string 
-     * @param $condition | string 
-     * @return $this | object
+     * Add a JOIN clause.
+     * 
+     * @param string $type
+     * @param string $table
+     * @param string $on
+     * @return self
      */
-    public function with(string $joinParameter, string $condition)
+    public function join(string $type, string $table, string $on): self
     {
-        $this->with .= str_ireplace("this", $this->table, ' ' . $joinParameter . ' JOIN ' . $condition);
-
+        $type = strtoupper($type);
+        if (!in_array($type, ['LEFT', 'RIGHT', 'INNER'])) {
+            throw new \InvalidArgumentException('Invalid join type: ' . $type);
+        }
+        $this->joins .= " $type JOIN $table ON $on";
         return $this;
     }
 
     /**
-     * @param $count = 1,2,3,4,5,6,7,8,9 | int 
-     * @return $this | object
+     * Set the LIMIT clause.
+     * 
+     * @param int $count
+     * @return self
      */
-    public function limit(int $count)
+    public function limit(int $count): self
     {
-        $this->limit .= " LIMIT $count ";
-
+        if ($count <= 0) {
+            throw new \InvalidArgumentException('Limit count must be greater than zero');
+        }
+        $this->limit = " LIMIT $count";
         return $this;
     }
 
     /**
+     * Add a GROUP BY clause.
+     * 
+     * @param string $column
+     * @return self
+     */
+    public function groupBy(string $column): self
+    {
+        $this->groupBy = " GROUP BY $column";
+        return $this;
+    }
+
+    /**
+     * Add a HAVING clause.
+     * 
+     * @param string $condition
+     * @return self
+     */
+    public function having(string $condition): self
+    {
+        $this->having = " HAVING $condition";
+        return $this;
+    }
+
+    /**
+     * Set the query to use DISTINCT.
+     * 
+     * @return self
+     */
+    public function distinct(): self
+    {
+        $this->distinct = true;
+        return $this;
+    }
+
+    /**
+     * Build and return the SQL query.
+     * 
+     * @return string
+     */
+    public function get(): string
+    {
+        $whereClause = !empty($this->where) ? ' WHERE ' . implode(' ', $this->where) : '';
+        return trim($this->select . $this->joins . $whereClause . $this->groupBy . $this->having . $this->orderBy . $this->limit);
+    }
+
+    /**
+     * Get the first result.
+     * 
+     * @return string
+     */
+    public function first(): string
+    {
+        $this->limit(1);
+        return $this->get();
+    }
+
+    /**
+     * Reset the query parameters to their default state.
+     * 
+     * @return void
+     */
+    public function reset(): void
+    {
+        $this->where = [];
+        $this->orderBy = '';
+        $this->limit = '';
+        $this->select = '';
+        $this->joins = '';
+        $this->groupBy = '';
+        $this->having = '';
+        $this->params = [];
+        $this->distinct = false;
+    }
+
+    /**
+     * Execute the query with bound parameters.
+     * 
      * @return mixed
      */
-    public function get()
+    public function execute()
     {
-       return   (@$this->select . @$this->table . @$this->with . @$this->where . @$this->orderBy . @$this->limit);
-    }
-
-    /**
-     * @return mixed
-     */
-    public function first()
-    {
-       return   (@$this->select . @$this->table . @$this->with . @$this->where . @$this->orderBy . limit 1);
+        // Assuming you have a PDO instance called $pdo
+        $pdo = new \PDO(/* DSN */, /* Username */, /* Password */);
+        $stmt = $pdo->prepare($this->get());
+        $stmt->execute($this->params);
+        return $stmt->fetchAll();
     }
 }
