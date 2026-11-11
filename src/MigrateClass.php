@@ -1,235 +1,439 @@
 <?php
-namespace Furkifor\MigrateClass;
 
-use mysqli;
-use Exception;
+namespace Furkifor\SqlDumper;
+
+use InvalidArgumentException;
+use LogicException;
+use PDO;
+use RuntimeException;
 
 /**
- * Class MigrateClass
- * @package Furkifor\SqlDumper
- * Handles database migrations.
+ * Fluent CREATE TABLE builder.
+ *
+ * Without a connection it only produces SQL (toSql() / createTable()).
+ * With a PDO connection createTable() and dropTable() also run the statement.
  */
 class MigrateClass
 {
-    private $conn;
-    private $table;
-    private $columns = [];
+    private const DRIVERS = [
+        'mysql' => 'mysql',
+        'mariadb' => 'mysql',
+        'sqlite' => 'sqlite',
+        'pgsql' => 'pgsql',
+        'postgres' => 'pgsql',
+        'postgresql' => 'pgsql',
+        'sqlsrv' => 'sqlsrv',
+        'sqlserver' => 'sqlsrv',
+    ];
 
-    public function __construct($databaseType)
-    {
-        $this->connect($databaseType);
-    }
+    private const TYPES = [
+        'mysql' => [
+            'id' => 'INT AUTO_INCREMENT PRIMARY KEY',
+            'string' => 'VARCHAR(%d)',
+            'int' => 'INT',
+            'bigint' => 'BIGINT',
+            'boolean' => 'TINYINT(1)',
+            'datetime' => 'DATETIME',
+            'text' => 'TEXT',
+            'float' => 'DOUBLE',
+            'json' => 'JSON',
+        ],
+        'sqlite' => [
+            'id' => 'INTEGER PRIMARY KEY AUTOINCREMENT',
+            'string' => 'VARCHAR(%d)',
+            'int' => 'INTEGER',
+            'bigint' => 'INTEGER',
+            'boolean' => 'INTEGER',
+            'datetime' => 'DATETIME',
+            'text' => 'TEXT',
+            'float' => 'REAL',
+            'json' => 'TEXT',
+        ],
+        'pgsql' => [
+            'id' => 'SERIAL PRIMARY KEY',
+            'string' => 'VARCHAR(%d)',
+            'int' => 'INTEGER',
+            'bigint' => 'BIGINT',
+            'boolean' => 'BOOLEAN',
+            'datetime' => 'TIMESTAMP',
+            'text' => 'TEXT',
+            'float' => 'DOUBLE PRECISION',
+            'json' => 'JSONB',
+        ],
+        'sqlsrv' => [
+            'id' => 'INT IDENTITY(1,1) PRIMARY KEY',
+            'string' => 'NVARCHAR(%d)',
+            'int' => 'INT',
+            'bigint' => 'BIGINT',
+            'boolean' => 'BIT',
+            'datetime' => 'DATETIME2',
+            'text' => 'NVARCHAR(MAX)',
+            'float' => 'FLOAT',
+            'json' => 'NVARCHAR(MAX)',
+        ],
+    ];
+
+    private const FK_ACTIONS = ['CASCADE', 'SET NULL', 'SET DEFAULT', 'RESTRICT', 'NO ACTION'];
+
+    private string $driver;
+
+    private ?PDO $pdo;
+
+    private string $table = '';
+
+    /** @var Column[] */
+    private array $columns = [];
+
+    /** @var string[] table level constraints (FOREIGN KEY, CHECK) */
+    private array $constraints = [];
+
+    private bool $ifNotExists = false;
 
     /**
-     * Establish a database connection based on the provided type.
-     * 
-     * @param string $databaseType
-     * @throws Exception
+     * @param string $databaseType mysql, sqlite, pgsql or sqlsrv
+     * @param PDO|null $pdo optional connection; without it only SQL is generated
      */
-    private function connect($databaseType)
+    public function __construct(string $databaseType = 'mysql', ?PDO $pdo = null)
     {
-        $config = parse_ini_file('config.ini');
-        $servername = $config['servername'];
-        $username = $config['username'];
-        $password = $config['password'];
-        $dbname = $config['dbname'];
-
-        switch ($databaseType) {
-            case 'mysql':
-                $this->conn = new mysqli($servername, $username, $password, $dbname);
-                if ($this->conn->connect_error) {
-                    throw new Exception("MySQL Connection failed: " . $this->conn->connect_error);
-                }
-                break;
-            case 'mongodb':
-                // Connect to MongoDB
-                break;
-            case 'sqlserver':
-                // Connect to SQL Server
-                break;
-            default:
-                throw new Exception("Unsupported database type: $databaseType");
+        $key = strtolower(trim($databaseType));
+        if (! isset(self::DRIVERS[$key])) {
+            throw new InvalidArgumentException(
+                "Unsupported database type: $databaseType (supported: mysql, sqlite, pgsql, sqlsrv)"
+            );
         }
+
+        $this->driver = self::DRIVERS[$key];
+        $this->pdo = $pdo;
     }
 
     /**
-     * Set the table name and initialize with an ID column.
-     * 
-     * @param string $table
-     * @return self
+     * Start a new table. Adds an auto increment "id" primary key unless $withId is false.
      */
-    public function name($table): self
+    public function name(string $table, bool $withId = true): static
     {
+        if (trim($table) === '') {
+            throw new InvalidArgumentException('Table name cannot be empty');
+        }
+
         $this->table = $table;
-        $this->columns[] = new Column("id", "INT(11)", ["AUTO_INCREMENT", "PRIMARY KEY", "NOT NULL"]);
+        $this->columns = [];
+        $this->constraints = [];
+        $this->ifNotExists = false;
+
+        return $withId ? $this->id() : $this;
+    }
+
+    public function ifNotExists(): static
+    {
+        $this->ifNotExists = true;
+
         return $this;
     }
 
-    /**
-     * Define a string column.
-     * 
-     * @param string $name
-     * @param int $length
-     * @param array $constraints
-     * @return self
-     */
-    public function string($name, $length = 255, $constraints = []): self
+    // ---------------------------------------------------------------------
+    // Column types
+    // ---------------------------------------------------------------------
+
+    public function id(string $name = 'id'): static
     {
-        $this->columns[] = new Column($name, "VARCHAR($length)", $constraints);
-        return $this;
+        return $this->addColumn($name, $this->type('id'));
     }
 
-    /**
-     * Define an integer column.
-     * 
-     * @param string $name
-     * @param array $constraints
-     * @return self
-     */
-    public function int($name, $constraints = []): self
+    public function string(string $name, int $length = 255, array $constraints = []): static
     {
-        $this->columns[] = new Column($name, "INT", $constraints);
-        return $this;
-    }
-
-    /**
-     * Define a boolean column.
-     * 
-     * @param string $name
-     * @param array $constraints
-     * @return self
-     */
-    public function boolean($name, $constraints = []): self
-    {
-        $this->columns[] = new Column($name, "TINYINT(1)", $constraints);
-        return $this;
-    }
-
-    /**
-     * Define a datetime column.
-     * 
-     * @param string $name
-     * @param array $constraints
-     * @return self
-     */
-    public function datetime($name, $constraints = []): self
-    {
-        $this->columns[] = new Column($name, "DATETIME", $constraints);
-        return $this;
-    }
-
-    /**
-     * Define a text column.
-     * 
-     * @param string $name
-     * @param array $constraints
-     * @return self
-     */
-    public function text($name, $constraints = []): self
-    {
-        $this->columns[] = new Column($name, "TEXT", $constraints);
-        return $this;
-    }
-
-    /**
-     * Define a foreign key column.
-     * 
-     * @param string $name
-     * @param string $referenceTable
-     * @param string $referenceColumn
-     * @param array $constraints
-     * @return self
-     */
-    public function foreignKey($name, $referenceTable, $referenceColumn, $constraints = []): self
-    {
-        $constraint = "FOREIGN KEY ($name) REFERENCES $referenceTable($referenceColumn)";
-        $this->columns[] = new Column($name, "INT", array_merge($constraints, [$constraint]));
-        return $this;
-    }
-
-    /**
-     * Add a CHECK constraint to the last added column.
-     * 
-     * @param string $check
-     * @return self
-     */
-    public function check($check): self
-    {
-        $this->columns[count($this->columns) - 1]->addConstraint("CHECK ($check)");
-        return $this;
-    }
-
-    /**
-     * Add a DEFAULT constraint to the last added column.
-     * 
-     * @param string $default
-     * @return self
-     */
-    public function default($default): self
-    {
-        $this->columns[count($this->columns) - 1]->addConstraint("DEFAULT $default");
-        return $this;
-    }
-
-    /**
-     * Create the table based on the defined columns.
-     * 
-     * @throws Exception
-     */
-    public function createTable(): void
-    {
-        $columnsString = implode(',', $this->columns);
-        $sql = "CREATE TABLE {$this->table} ($columnsString)";
-        
-        if ($this->conn->query($sql) === TRUE) {
-            echo "Table {$this->table} created successfully";
-        } else {
-            throw new Exception("Error creating table: " . $this->conn->error);
+        if ($length <= 0) {
+            throw new InvalidArgumentException('String length must be greater than zero');
         }
-    }
-}
 
-/**
- * Class representing a database column.
- */
-class Column
-{
-    private $name;
-    private $type;
-    private $constraints = [];
-
-    /**
-     * Column constructor.
-     * 
-     * @param string $name
-     * @param string $type
-     * @param array $constraints
-     */
-    public function __construct($name, $type, $constraints = [])
-    {
-        $this->name = $name;
-        $this->type = $type;
-        $this->constraints = $constraints;
+        return $this->addColumn($name, sprintf($this->type('string'), $length), $constraints);
     }
 
-    /**
-     * Add a constraint to the column.
-     * 
-     * @param string $constraint
-     * @return void
-     */
-    public function addConstraint($constraint): void
+    public function int(string $name, array $constraints = []): static
     {
+        return $this->addColumn($name, $this->type('int'), $constraints);
+    }
+
+    public function bigInt(string $name, array $constraints = []): static
+    {
+        return $this->addColumn($name, $this->type('bigint'), $constraints);
+    }
+
+    public function decimal(string $name, int $precision = 10, int $scale = 2, array $constraints = []): static
+    {
+        if ($precision <= 0 || $scale < 0 || $scale > $precision) {
+            throw new InvalidArgumentException("Invalid decimal precision/scale: $precision, $scale");
+        }
+
+        return $this->addColumn($name, "DECIMAL($precision, $scale)", $constraints);
+    }
+
+    public function float(string $name, array $constraints = []): static
+    {
+        return $this->addColumn($name, $this->type('float'), $constraints);
+    }
+
+    public function boolean(string $name, array $constraints = []): static
+    {
+        return $this->addColumn($name, $this->type('boolean'), $constraints);
+    }
+
+    public function date(string $name, array $constraints = []): static
+    {
+        return $this->addColumn($name, 'DATE', $constraints);
+    }
+
+    public function datetime(string $name, array $constraints = []): static
+    {
+        return $this->addColumn($name, $this->type('datetime'), $constraints);
+    }
+
+    public function text(string $name, array $constraints = []): static
+    {
+        return $this->addColumn($name, $this->type('text'), $constraints);
+    }
+
+    public function json(string $name, array $constraints = []): static
+    {
+        return $this->addColumn($name, $this->type('json'), $constraints);
+    }
+
+    /**
+     * Nullable created_at and updated_at columns.
+     */
+    public function timestamps(): static
+    {
+        return $this->datetime('created_at')->nullable()->datetime('updated_at')->nullable();
+    }
+
+    // ---------------------------------------------------------------------
+    // Modifiers (apply to the last added column)
+    // ---------------------------------------------------------------------
+
+    public function notNull(): static
+    {
+        $this->lastColumn()->setNullable(false);
+
+        return $this;
+    }
+
+    public function nullable(): static
+    {
+        $this->lastColumn()->setNullable(true);
+
+        return $this;
+    }
+
+    public function unique(): static
+    {
+        $this->lastColumn()->setUnique();
+
+        return $this;
+    }
+
+    /**
+     * Default value. Numbers, booleans and null are written as is, strings are quoted.
+     * Known SQL expressions (CURRENT_TIMESTAMP, NOW(), ...) are kept unquoted;
+     * use defaultRaw() for anything else that must not be quoted.
+     */
+    public function default(mixed $value): static
+    {
+        if ($value === null) {
+            $expression = 'NULL';
+        } elseif (is_bool($value)) {
+            $expression = $this->driver === 'pgsql' ? ($value ? 'TRUE' : 'FALSE') : ($value ? '1' : '0');
+        } elseif (is_int($value) || is_float($value)) {
+            $expression = (string) $value;
+        } elseif (is_string($value)) {
+            $expression = $this->isSqlExpression($value)
+                ? $value
+                : "'" . str_replace("'", "''", $value) . "'";
+        } else {
+            throw new InvalidArgumentException('Default value must be a scalar or null');
+        }
+
+        $this->lastColumn()->setDefault($expression);
+
+        return $this;
+    }
+
+    public function defaultRaw(string $expression): static
+    {
+        $this->lastColumn()->setDefault($expression);
+
+        return $this;
+    }
+
+    // ---------------------------------------------------------------------
+    // Table constraints
+    // ---------------------------------------------------------------------
+
+    /**
+     * Add a foreign key. If the column was not defined yet, an integer column is created for it.
+     *
+     * @param string|array|null $onDelete CASCADE, SET NULL, SET DEFAULT, RESTRICT or NO ACTION
+     */
+    public function foreignKey(
+        string $name,
+        string $referenceTable,
+        string $referenceColumn = 'id',
+        string|array|null $onDelete = null
+    ): static {
+        $this->requireTable();
+
+        // Old signature had a raw column-constraint array as 4th argument.
+        $columnConstraints = is_array($onDelete) ? $onDelete : [];
+        $onDelete = is_array($onDelete) ? null : $onDelete;
+
+        if (! $this->hasColumn($name)) {
+            $this->int($name, $columnConstraints);
+        }
+
+        $constraint = "FOREIGN KEY ($name) REFERENCES $referenceTable($referenceColumn)";
+        if ($onDelete !== null) {
+            $action = strtoupper(trim($onDelete));
+            if (! in_array($action, self::FK_ACTIONS, true)) {
+                throw new InvalidArgumentException('Invalid ON DELETE action: ' . $onDelete);
+            }
+            $constraint .= ' ON DELETE ' . $action;
+        }
+
         $this->constraints[] = $constraint;
+
+        return $this;
     }
 
     /**
-     * Convert the column to a string representation.
-     * 
-     * @return string
+     * Add a CHECK constraint to the table.
      */
+    public function check(string $expression): static
+    {
+        $this->requireTable();
+        $this->constraints[] = "CHECK ($expression)";
+
+        return $this;
+    }
+
+    // ---------------------------------------------------------------------
+    // Output
+    // ---------------------------------------------------------------------
+
+    /**
+     * The CREATE TABLE statement.
+     */
+    public function toSql(): string
+    {
+        $this->requireTable();
+        if ($this->columns === []) {
+            throw new LogicException("Table {$this->table} has no columns");
+        }
+
+        $definitions = array_merge(array_map('strval', $this->columns), $this->constraints);
+
+        // SQL Server has no CREATE TABLE IF NOT EXISTS.
+        $ifNotExists = $this->ifNotExists && $this->driver !== 'sqlsrv' ? 'IF NOT EXISTS ' : '';
+
+        return "CREATE TABLE {$ifNotExists}{$this->table} (" . implode(', ', $definitions) . ')';
+    }
+
     public function __toString(): string
     {
-        return "{$this->name} {$this->type} " . implode(' ', $this->constraints);
+        return $this->toSql();
+    }
+
+    /**
+     * Returns the CREATE TABLE statement, and runs it when a connection was given.
+     */
+    public function createTable(): string
+    {
+        $sql = $this->toSql();
+        $this->run($sql);
+
+        return $sql;
+    }
+
+    /**
+     * Returns a DROP TABLE IF EXISTS statement, and runs it when a connection was given.
+     */
+    public function dropTable(?string $table = null): string
+    {
+        $table = $table ?? $this->table;
+        if (trim($table) === '') {
+            throw new LogicException('No table name given');
+        }
+
+        $sql = "DROP TABLE IF EXISTS $table";
+        $this->run($sql);
+
+        return $sql;
+    }
+
+    // ---------------------------------------------------------------------
+    // Internals
+    // ---------------------------------------------------------------------
+
+    private function run(string $sql): void
+    {
+        if ($this->pdo === null) {
+            return;
+        }
+
+        if ($this->pdo->exec($sql) === false) {
+            throw new RuntimeException('Migration failed: ' . implode(' ', $this->pdo->errorInfo()));
+        }
+    }
+
+    private function type(string $name): string
+    {
+        return self::TYPES[$this->driver][$name];
+    }
+
+    private function addColumn(string $name, string $type, array $constraints = []): static
+    {
+        $this->requireTable();
+        if (trim($name) === '') {
+            throw new InvalidArgumentException('Column name cannot be empty');
+        }
+        if ($this->hasColumn($name)) {
+            throw new InvalidArgumentException("Column $name is already defined on table {$this->table}");
+        }
+
+        $this->columns[] = new Column($name, $type, $constraints);
+
+        return $this;
+    }
+
+    private function hasColumn(string $name): bool
+    {
+        foreach ($this->columns as $column) {
+            if ($column->getName() === $name) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function lastColumn(): Column
+    {
+        if ($this->columns === []) {
+            throw new LogicException('Add a column before using a column modifier');
+        }
+
+        return $this->columns[count($this->columns) - 1];
+    }
+
+    private function requireTable(): void
+    {
+        if ($this->table === '') {
+            throw new LogicException('Call name() first to set the table name');
+        }
+    }
+
+    private function isSqlExpression(string $value): bool
+    {
+        $upper = strtoupper(trim($value));
+
+        return in_array($upper, ['CURRENT_TIMESTAMP', 'CURRENT_DATE', 'CURRENT_TIME', 'NULL', 'TRUE', 'FALSE'], true)
+            || preg_match('/^[A-Z_][A-Z0-9_]*\(.*\)$/', $upper) === 1;
     }
 }

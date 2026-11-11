@@ -1,0 +1,13 @@
+parameters:
+    level: 6
+    paths:
+        - src
+    # Arguments are validated at runtime on purpose, so PHPDoc types are not treated as guarantees.
+    treatPhpDocTypesAsCertain: false
+    ignoreErrors:
+        # Laravel macros are bound to the builder at runtime; rawSql() is the macro registered in the same file.
+        -
+            identifier: method.notFound
+            path: src/Laravel/BuilderMacros.php
+        -
+            identifier: missingType.iterableValue
