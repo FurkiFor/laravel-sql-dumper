@@ -1,11 +1,26 @@
 {
     "name": "furkifor/sql_dumper",
-    "description": "Laravel eloquent mantığıyla orm işlemlerinde sql çıktısı alma projesi ",
+    "description": "Laravel SQL dumper: see the raw SQL of any Eloquent or query builder query with bindings filled in, log and profile executed queries, detect N+1, plus a standalone PHP SQL query builder and migration tool.",
     "keywords": [
-        "FurkiFor",
-        "sql_dumper"
+        "laravel",
+        "sql",
+        "sql-dumper",
+        "raw-sql",
+        "eloquent",
+        "query-builder",
+        "query-log",
+        "debug",
+        "n-plus-one",
+        "bindings",
+        "migration",
+        "pdo",
+        "php"
     ],
-    "homepage": "https://github.com/furkifor/sql_dumper",
+    "homepage": "https://github.com/FurkiFor/laravel-sql-dumper",
+    "support": {
+        "issues": "https://github.com/FurkiFor/laravel-sql-dumper/issues",
+        "source": "https://github.com/FurkiFor/laravel-sql-dumper"
+    },
     "license": "MIT",
     "authors": [
         {
@@ -15,13 +30,16 @@
         }
     ],
     "require": {
-        "php": "^7.2"
+        "php": "^8.2"
     },
     "require-dev": {
-        "friendsofphp/php-cs-fixer": "^2.17",
-        "phpunit/phpunit": "^9.5",
-        "spatie/ray": "^1.10",
-        "vimeo/psalm": "^4.3"
+        "orchestra/testbench": "^9.0 || ^10.0 || ^11.0",
+        "phpstan/phpstan": "^2.1",
+        "phpunit/phpunit": "^11.5 || ^12.0"
+    },
+    "suggest": {
+        "ext-pdo": "Required to run queries and migrations with execute() / createTable()",
+        "illuminate/database": "Enables the rawSql() / dumpSql() macros and QueryLog inside Laravel"
     },
     "autoload": {
         "psr-4": {
@@ -34,14 +52,22 @@
         }
     },
     "scripts": {
-        "psalm": "vendor/bin/psalm",
         "test": "vendor/bin/phpunit",
-        "test-coverage": "vendor/bin/phpunit --coverage-html coverage",
-        "format": "vendor/bin/php-cs-fixer fix --allow-risky=yes"
+        "analyse": "vendor/bin/phpstan analyse --no-progress",
+        "check": [
+            "@analyse",
+            "@test"
+        ]
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Furkifor\\SqlDumper\\Laravel\\SqlDumperServiceProvider"
+            ]
+        }
     },
     "config": {
         "sort-packages": true
     },
-    "minimum-stability": "dev",
-    "prefer-stable": true
+    "minimum-stability": "stable"
 }
